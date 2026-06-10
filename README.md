@@ -31,7 +31,49 @@ https://github.com/user-attachments/assets/b04cb905-dbd9-414c-b048-8cb5c4c38a50
 1. Download the `.vsix` file from [Releases](https://github.com/piashsarker/cell-completion-sound/releases)
 2. Open Command Palette (`Cmd+Shift+P` / `Ctrl+Shift+P`)
 3. Run **"Extensions: Install from VSIX..."**
-4. Select the downloaded file
+4. Select the downloaded `.vsix` file
+5. Click **Reload** when prompted (or run "Developer: Reload Window")
+
+### Build from Source
+
+If you want to build the extension yourself:
+
+```bash
+# Clone the repo
+git clone https://github.com/piashsarker/cell-completion-sound.git
+cd cell-completion-sound
+
+# Install dependencies
+npm install
+
+# Compile TypeScript
+npm run compile
+
+# Package as .vsix (requires vsce)
+npm install -g @vscode/vsce
+vsce package --allow-missing-repository
+```
+
+This will generate a `notebook-cell-sound-x.x.x.vsix` file in the project root.
+
+#### Install the built .vsix in VS Code / Kiro
+
+**Option 1: Command Palette**
+1. Open VS Code or Kiro
+2. Press `Cmd+Shift+P` (macOS) or `Ctrl+Shift+P` (Windows/Linux)
+3. Type **"Extensions: Install from VSIX..."** and select it
+4. Browse to the `.vsix` file and select it
+5. Reload the window when prompted
+
+**Option 2: CLI**
+```bash
+code --install-extension notebook-cell-sound-1.0.1.vsix
+```
+
+For Kiro:
+```bash
+kiro --install-extension notebook-cell-sound-1.0.1.vsix
+```
 
 ## Usage
 
