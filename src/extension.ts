@@ -4,9 +4,8 @@ import { SoundPlayer } from './soundPlayer';
 let soundPlayer: SoundPlayer;
 let outputChannel: vscode.OutputChannel;
 
-// Track cells by their execution count to detect completion
-const cellExecutionCounts = new Map<string, number>();
-const cellsInProgress = new Set<string>();
+// Track cells that have started executing (have a start time but no end time yet)
+const cellsExecuting = new Map<string, number>(); // cellKey -> executionOrder when started
 
 export function activate(context: vscode.ExtensionContext) {
     // Create output channel for debugging
@@ -85,7 +84,7 @@ export function activate(context: vscode.ExtensionContext) {
         outputChannel.show();
     });
 
-    // Watch for notebook cell output changes to detect execution completion
+    // Watch for notebook cell changes to detect execution completion
     const notebookChangeHandler = vscode.workspace.onDidChangeNotebookDocument((event) => {
         handleNotebookChange(event);
     });
@@ -129,40 +128,37 @@ function handleNotebookChange(event: vscode.NotebookDocumentChangeEvent): void {
         const cell = cellChange.cell;
         const cellKey = getCellKey(notebookUri, cell.index);
         const summary = cell.executionSummary;
+        const executionOrder = summary?.executionOrder;
+        const success = summary?.success;
 
-        outputChannel.appendLine(`Cell ${cell.index}: executionOrder=${summary?.executionOrder}, success=${summary?.success}`);
-        
-        // Track cells that have outputs being added (indicates execution in progress)
-        if (cellChange.outputs) {
-            outputChannel.appendLine(`  Outputs changed - marking cell as in progress`);
-            cellsInProgress.add(cellKey);
-        }
+        outputChannel.appendLine(`Cell ${cell.index}: executionOrder=${executionOrder}, success=${success}`);
 
         if (cellChange.executionSummary) {
             outputChannel.appendLine(`  ExecutionSummary changed!`);
             
-            const newExecutionOrder = summary?.executionOrder;
-            const previousOrder = cellExecutionCounts.get(cellKey);
+            const trackedOrder = cellsExecuting.get(cellKey);
             
-            outputChannel.appendLine(`  Previous order: ${previousOrder}, New order: ${newExecutionOrder}`);
-            
-            // If execution order changed, a cell just completed
-            if (newExecutionOrder !== undefined && newExecutionOrder !== previousOrder) {
-                cellExecutionCounts.set(cellKey, newExecutionOrder);
-                
-                // Play sound when cell execution completes
-                // Either: cell was marked in progress, OR this is a new execution (first time or re-run)
-                if (cellsInProgress.has(cellKey) || previousOrder === undefined || newExecutionOrder > (previousOrder || 0)) {
-                    cellsInProgress.delete(cellKey);
-                    outputChannel.appendLine(`  Cell execution completed! Playing sound after delay...`);
-                    
-                    // Add a small delay to ensure outputs and success status are fully updated
-                    setTimeout(() => {
-                        // Re-read the cell's execution summary after delay
-                        const finalSuccess = cell.executionSummary?.success;
-                        outputChannel.appendLine(`  After delay - success=${finalSuccess}`);
-                        onCellExecutionComplete(cell, finalSuccess);
-                    }, 100);
+            // Check if this is a new execution starting (success is undefined means still running or just started)
+            if (executionOrder !== undefined && success === undefined) {
+                // Execution started - track it
+                if (trackedOrder !== executionOrder) {
+                    outputChannel.appendLine(`  Cell execution STARTED (order: ${executionOrder})`);
+                    cellsExecuting.set(cellKey, executionOrder);
+                }
+            }
+            // Check if execution completed (success is true or false)
+            else if (executionOrder !== undefined && success !== undefined) {
+                // Execution completed
+                if (trackedOrder === executionOrder) {
+                    // This cell was being tracked and now completed
+                    outputChannel.appendLine(`  Cell execution COMPLETED (order: ${executionOrder}, success: ${success})`);
+                    cellsExecuting.delete(cellKey);
+                    onCellExecutionComplete(cell, success);
+                } else if (trackedOrder === undefined) {
+                    // Cell completed but we didn't see it start (e.g., extension loaded mid-execution)
+                    // Still play the sound
+                    outputChannel.appendLine(`  Cell execution COMPLETED (wasn't tracked, order: ${executionOrder}, success: ${success})`);
+                    onCellExecutionComplete(cell, success);
                 }
             }
         }
@@ -208,6 +204,5 @@ function checkCellForError(cell: vscode.NotebookCell): boolean {
 }
 
 export function deactivate() {
-    cellExecutionCounts.clear();
-    cellsInProgress.clear();
+    cellsExecuting.clear();
 }
